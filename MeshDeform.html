@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>2D Mesh Deform</title>
+	</head>
+	
+	<body onload="draw();">
+		<canvas id="canvas" width="1000" height="1000"></canvas>
+		<script type="text/javascript">
+
+			var map = function(a, olow, ohigh, ilow, ihigh){
+				return ((a-olow)/((olow-ohigh)))*(ilow-ihigh)+ilow;
+			}
+			
+			function getPosition(el) {
+  				var xPosition = 0;
+  				var yPosition = 0;
+ 
+  				while (el) {
+   			 		xPosition += (el.offsetLeft - el.scrollLeft + el.clientLeft);
+    				yPosition += (el.offsetTop - el.scrollTop + el.clientTop);
+    				el = el.offsetParent;
+ 				 }
+  				return {
+    				x: xPosition,
+    				y: yPosition
+  				};
+			}       
+			var dist = function(x1,y1,x2,y2){
+				return Math.pow(Math.pow(x1-x2,2)+Math.pow(y1-y2,2),0.5);
+
+			}
+
+			var distequal = function(crds,ex,ey,d){
+				for(var i=0;i<crds.length;i++){
+				if(dist(crds[i][0],crds[i][1],ex,ey)<d){
+					crds[i][0]=ex;
+					crds[i][1]=ey;
+					break;
+				}
+			}
+			return crds;
+			}
+
+			var drawShape = function(x,y,ctx){
+				
+				ctx.beginPath();
+				ctx.moveTo(x[0],y[0]);
+				for(var i =0;i<x.length-1;i++){
+					ctx.lineTo(x[i+1],y[i+1]);
+				}
+				ctx.closePath();
+				ctx.stroke();
+				ctx.fill();
+			}
+			var random = function(low, high){
+				var rand = Math.floor(Math.random()* (high+1-low));
+				rand +=low;
+				return rand;
+			}
+
+			var drawLine = function(x1,y1,x2,y2,ctx){
+				//var ctx = document.getElementById('canvas').getContext('2d');
+				ctx.beginPath();
+				ctx.moveTo(x1,y1);
+				ctx.lineTo(x2,y2);
+				ctx.closePath();
+				ctx.stroke();
+			}
+			var rectangle = function(x,y,s,s,ctx){
+				ctx.rect(x,y,s,s);
+			}
+
+			var colorr = function(r,g,b,a){
+				this.r = r,
+				this.g = g,
+				this.b = b,
+				this.a = a
+			}
+
+			var shapeFill = function(fillColor,ctx){
+				
+
+				ctx.fillStyle = `rgba(${ fillColor.r }, ${ fillColor.g }, ${ fillColor.b }, ${ fillColor.a })`;
+			}
+
+			var shapeStroke = function(fillColor,ctx){
+				
+
+				ctx.strokeStyle = `rgba(${ fillColor.r }, ${ fillColor.g }, ${ fillColor.b }, ${ fillColor.a })`;
+			}
+			var canvasPos = getPosition(canvas);
+			var mouseX = 500;
+			var mouseY = 350;
+			var clicked = false;
+
+			
+ 
+			canvas.addEventListener("mousemove", setMousePosition, false);
+			canvas.addEventListener("mousedown", mouseClicked, false);
+			canvas.addEventListener("mouseup", mouseUnClicked, false);
+ 
+			function setMousePosition(e) {
+ 				mouseX = e.clientX - canvasPos.x-500;
+  				mouseY = e.clientY - canvasPos.y-350;
+  				//ctx.clearRect(0+, 0, canvas.width, canvas.height);
+
+			}
+			function mouseClicked(){
+				clicked = true;
+			}
+			function mouseUnClicked(){
+				clicked = false;
+			}
+
+
+
+
+
+
+
+
+			//var canvas = document.getElementById('canvas');
+			var lb = -300;
+			var ub = 300;
+			var ap =[[lb,lb],
+    				 [lb,ub],
+    				 [ub,ub],
+    				 [ub,lb]];
+    		var apc = [[lb,lb],
+    				 [lb,ub],
+    				 [ub,ub],
+    				 [ub,lb]];
+    		//mousepos = [];
+    		var doneDraw = false;
+			var num =-1;
+			var angRad = Math.PI/180;
+			var u = 0;
+			var l = 0;
+			var x = [];
+			var y = [];
+			var dx = [];
+			var dy = [];
+		
+			function draw(){
+				
+				var colB = new colorr(100,200,200,255);
+				var canvas = document.getElementById('canvas')
+				var ctx = canvas.getContext('2d');
+				ctx.save();
+				//ctx.stroke();
+				ctx.translate(500,350);
+				ctx.clearRect(-500,-350, 1500,1350);
+				if(doneDraw === false){
+					for(var i =0;i<4;i++){
+			    	rectangle(ap[i][0],ap[i][1],20,20,ctx);
+
+			   		}
+
+					if(clicked){
+						num++;
+						x[num]=mouseX;
+						y[num]=mouseY;
+					}
+					var colw = new colorr(255,255,255,0);
+					shapeFill(colw,ctx);
+
+					for(var i=0;i<num;i++){
+						drawShape(x,y,ctx);
+					}
+
+					if(dist(mouseX,mouseY,-500,-350)<50){
+						doneDraw = true;
+					}
+
+				}
+				if(doneDraw){
+
+					shapeFill(new colorr(0,255,0,1),ctx);
+					ctx.stroke();
+					for(var i =0;i<4;i++){
+			    	rectangle(ap[i][0],ap[i][1],20,20,ctx);
+			    	rectangle(apc[i][0],apc[i][1],10,10,ctx);
+			    	//drawLine(ap[i][0],ap[i][1],apc[i][0],apc[i][1],ctx);
+
+
+			    }
+
+				if(clicked){
+
+				ap = distequal(ap,mouseX,mouseY,50);
+}
+
+			   // ctx.globalCompositeOperation = 'source-over';
+			    
+
+			    ctx.stroke();
+			    
+
+
+			     for(var i=0;i<num;i++){
+        		u = map(x[i],lb,ub,ap[0][1],ap[3][1]);
+        		l = map(x[i],lb,ub,ap[1][1],ap[2][1]);
+        		dy[i] = map(y[i],lb,ub,u,l);
+        
+        		u = map(y[i],lb,ub,ap[0][0],ap[1][0]);
+        		l = map(y[i],lb,ub,ap[3][0],ap[2][0]);
+        		dx[i] = map(x[i],lb,ub,u,l);
+    			}
+    						    for(var i =0;i<num;i++){
+			    	drawLine(x[i],y[i],dx[i],dy[i],ctx);
+			    }
+					shapeFill(new colorr(100,100,200,0.1),ctx);
+					drawShape(x,y,ctx);
+					shapeFill(colB,ctx);
+			 //   for(var i=0;i<num;i++){
+			    	drawShape(dx,dy,ctx);
+			   // 	ctx.rect(dx[i],dy[i],5,5);
+			   // }
+			    //var colB = colorr(random(0,200),random(0,200),random(0,200),random(0,200));
+			    }
+			    shapeFill(colB,ctx);
+
+
+			    
+
+
+
+			    ctx.restore();
+			    window.requestAnimationFrame(draw);
+			}
+			window.requestAnimationFrame(draw);
+			
+			
+
+
+
+</script>
+</body>
+</html>
