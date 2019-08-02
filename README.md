@@ -1,2 +1,2 @@
 # jsGraphics
-Javascript Graphics
+Exploration with Javascript Canvas Graphics
