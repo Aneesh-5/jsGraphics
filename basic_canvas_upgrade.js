@@ -83,6 +83,7 @@ var _shape = function(vertices, line_color, shape_color){
     this.vertices = vertices;
     this.line_color = line_color;
     this.shape_color = shape_color;
+    this.normals = [];
 };
 _shape.prototype.draw = function() {
     
@@ -100,6 +101,49 @@ _shape.prototype.draw = function() {
         vtx.c.fill();
         ellipse(vtx.x, vtx.y, vtx.r, vtx.r);
     }
+};
+_shape.prototype.find_normals = function(){
+    var n = this.vertices.length;
+    for(var i = 0; i<n;i++){
+        
+        var A = this.vertices[i];
+        var B = this.vertices[(i+1)%n];
+        
+        var dx = B.x - A.x;
+        var dy = B.y - A.y;
+        
+        var theta = Math.atan2(dy, dx);
+        var _cos = Math.cos(-theta);
+        var _sin = Math.sin(-theta);
+        
+        this.normals[i] = [A, _cos, _sin];
+    }
+};
+_shape.prototype.membership = function(_x, _y){
+    var n = this.vertices.length;
+    var epsilon = 4;
+    var membership = true;
+    var edge_case = true;
+    for(var i=0; i<n; i++){
+        var A = this.normals[i][0];
+        var _cos = this.normals[i][1];
+        var _sin = this.normals[i][2];
+        
+        var px = _x - A.x;
+        var py = _y - A.y;
+        
+        var xPrime = _cos*px - _sin*py;
+        var yPrime = _sin*px + _cos*py;
+        
+        membership = membership && (yPrime >= 10);
+        //edge_case = edge_case && (yPrime>=-epsilon && yPrime<=epsilon);
+        edge_case = edge_case && (yPrime >= -1 );
+    }
+    
+    return [membership, edge_case];
+};
+_shape.prototype.bake_normals = function(){
+   this.find_normals();
 };
 
 //Better Canvas
@@ -188,8 +232,9 @@ var canvas = {
     },
     
     // Custom Canvas Functions Below
-    
+    grid_size: 0,
     drawGrid: function(grid_size, stroke_color, stroke_size){
+        this.grid_size = grid_size;
         stroke_color.stroke(undefined, stroke_size);
         for(var i = 0; i<grid_size; i++){
         var mapped_val = map(i, 0, grid_size-1, -this.height, this.height);
@@ -198,7 +243,41 @@ var canvas = {
         
         }
     
+    },
+    
+    pixelShade: function(shape, steps){
+        
+        var pixel_size = (this.height*2)/this.grid_size;
+        noStroke();
+        fill(255, 0, 0, 100);
+        
+        
+        for(var i=0; i<=this.grid_size; i++){
+            for(var j=0; j<=this.grid_size; j++){
+                //quick exclusion case
+                //color decision case
+                    var pixel_x = map(j, 0, this.grid_size, -this.height, this.height);
+                    var pixel_y = map(i, 0, this.grid_size, -this.width, this.width);
+                    var result = shape.membership(pixel_x + pixel_size/2, pixel_y+ pixel_size/2);
+                    
+                    var full_shade = result[0];
+                    var partial_shade = result[1];
+                    
+                    if (!full_shade && !partial_shade){
+                        continue;
+                    }else{
+                        if(full_shade){
+                            fill(0,0,0,255);
+                        }else if(partial_shade){
+                            fill(0,0,0,150);
+                        }
+                        rect(pixel_x, pixel_y, pixel_size, pixel_size);
+                    }
+            }
+        }
+    
     }
+    
 };
 
 
@@ -208,27 +287,32 @@ var canvas = {
 //Setup
 var line_color = new _color(0);
 var vertices = [];
-var num_vertices = 3;
+var num_vertices = 5;
 var vtx_radius = 10;
-var vtx_color = new _color(200, 50, 50, 100);
+var vtx_color = new _color(200, 50, 50);
 
 for (var i = 0; i<num_vertices; i++){
     var vx = 200*cos((360/num_vertices)*i);
     var vy = 200*sin((360/num_vertices)*i);
     vertices[i] = new _vertex(vx, vy, vtx_radius, vtx_color);
 }
-var basic_shape = new _shape(vertices, new _color(0,0,0, 200), new _color(100,175,255, 100));
+var basic_shape = new _shape(vertices, new _color(0,0,0), new _color(100,175,255,100));
 
-var black = new _color(0,0,0);
+var black = new _color(0,0,0, 100);
 
+basic_shape.bake_normals();
 
 //Draw Frames
 canvas.init(300,300, new _color(255));
 draw = function(){
     canvas.beginFrame();
+    basic_shape.bake_normals();
     
-    basic_shape.draw();
+
     canvas.drag(basic_shape.vertices);
-    canvas.drawGrid(50, black, 1);
+    //canvas.drawGrid(50, black, 1);
+    canvas.grid_size = 30;
+    canvas.pixelShade(basic_shape, 0);
+    basic_shape.draw();
     canvas.endFrame(true, true);
 };
