@@ -90,26 +90,38 @@ var _shape = function(vertices, line_color, shape_color){
     this.line_color = line_color;
     this.shape_color = shape_color;
 };
-_shape.prototype.draw = function() {
+_shape.prototype.draw = function(face, lines, vertices) {
+    if(face){
+        this.shape_color.fill();
+    }else{ noFill();}
+    if(lines){
+        this.line_color.stroke();
+    }else{ noStroke();}
     
-    this.shape_color.fill();
-    this.line_color.stroke();
-    beginShape();
+    if(face || lines){
+        beginShape();
+            for(var i=0; i<this.vertices.length; i++){
+                vertex(this.vertices[i].x, this.vertices[i].y);
+            }
+        endShape(CLOSE);
+    }
+    if(vertices){
+        noStroke();
         for(var i=0; i<this.vertices.length; i++){
-            vertex(this.vertices[i].x, this.vertices[i].y);
+            var vtx = this.vertices[i];
+            vtx.c.fill();
+            ellipse(vtx.x, vtx.y, vtx.r, vtx.r);
         }
-    endShape(CLOSE);
-    
-    noStroke();
-    for(var i=0; i<this.vertices.length; i++){
-        var vtx = this.vertices[i];
-        vtx.c.fill();
-        ellipse(vtx.x, vtx.y, vtx.r, vtx.r);
     }
 };
+//todo: Bake dx^2 + dy^2 and B
 _shape.prototype.bake_edges = function(){
     this.edges = [];
     var n = this.vertices.length;
+    var minX = Infinity;
+    var maxX = -Infinity;
+    var minY = Infinity;
+    var maxY = -Infinity;
     
     for(var i = 0, j = n-1; i<n; j = i++){
         var A = this.vertices[j];
@@ -118,10 +130,17 @@ _shape.prototype.bake_edges = function(){
             A: A,
             dx: B.x - A.x,
             dy: B.y - A.y,
-            minY: Math.min(A.y, B.y),
-            maxY: Math.max(A.y, B.y)
+            minY: min(A.y, B.y),
+            maxY: max(A.y, B.y)
         });
+        
+        minX = min(minX, A.x);
+        maxX = max(maxX, A.x);
+        minY = min(minY, A.y);
+        maxY = max(maxY, A.y);
     }
+    
+    this.bounding_box = {minX:minX, maxX:maxX, minY:minY, maxY:maxY};
 };
 _shape.prototype.inside = function(x, y){
     var inside = false;
@@ -135,6 +154,44 @@ _shape.prototype.inside = function(x, y){
         if (x<intersection_X){ inside = !inside;}
     }
     return inside;
+};
+_shape.prototype.edge_distance = function(px, py, A, B){
+    var dx = B.x - A.x;
+    var dy = B.y - A.y;
+    var vx = px - A.x;
+    var vy = py - A.y;
+    
+    var projection = (vx*dx + vy*dy)/(dx*dx + dy*dy);
+    projection = Math.max(0, Math.min(1, projection));
+    
+    var cx = A.x + projection*dx;
+    var cy = A.y + projection*dy;
+    
+    var _dist = sqrt(pow((px-cx),2) + pow((py-cy),2));
+    return _dist;
+
+};
+_shape.prototype.min_edge_distance = function(x, y){
+    var min_dist = Infinity;
+    var n = this.edges.length;
+    
+    for(var i = 0; i<n; i++){
+        var edge = this.edges[i];
+        var B = { x: edge.A.x + edge.dx, y: edge.A.y + edge.dy};
+        var _dist = this.edge_distance(x, y, edge.A, B);
+        if (_dist<min_dist){ min_dist = _dist;}
+    }
+    if (this.inside(x, y)){ min_dist = -min_dist;}
+    return min_dist;
+    
+};
+_shape.prototype.coverage = function(px, py, pixel_size){
+    var _dist = this.min_edge_distance(px, py);
+    var halfPixel = pixel_size/2;
+    
+    var coverage = 0.5 - _dist / pixel_size;
+    coverage = min(max(coverage,0),1);
+    return coverage;
 };
 
 //Better Canvas
@@ -252,12 +309,17 @@ var canvas = {
     
     rasterize: function(shape){
         noStroke();
-        fill(0,0,0, 150);
         for(var i = 0; i<this.num_cells; i++){
             var x = this.screenSpace[i*2];
             var y = this.screenSpace[i*2 + 1];
-            
-            if(shape.inside(x,y)){
+            if (x<shape.bounding_box.minX ||
+                x>shape.bounding_box.maxX ||
+                y<shape.bounding_box.minY ||
+                y>shape.bounding_box.maxY){ continue;}
+                
+            var coverage = shape.coverage(x, y, this.pixel_size);
+            if(coverage >0){
+                shape.shape_color.fill(coverage*255);
                 rect(
                     x - this.pixel_size/2,
                     y - this.pixel_size/2,
@@ -288,11 +350,11 @@ var canvas = {
 var shapes = [];
 
 var vtx_radius = 10;
-var vtx_color = new _color(255,0,0,100);
-var black = new _color(0, 0, 0, 100);
+var vtx_color = new _color(0,0,0,80);
+var black = new _color(0, 0, 0, 150);
 var console_col = new _color(0,0,0);
 
-for(var j = 3; j<7; j++){
+for(var j = 3; j<10; j++){
     var vertices = [];
     var random_center_x = random(-130,130);
     var random_center_y = random(-130,130);
@@ -306,13 +368,12 @@ for(var j = 3; j<7; j++){
     }
     shapes.push(new _shape(vertices, black, random_color));
 }
-
 var rebake = new Array(shapes.length).fill(true);
 
 
 //Draw Frames
 canvas.init(300,300, new _color(255));
-canvas.init_rasterization(50, true);
+canvas.init_rasterization(100, true);
 
 draw = function(){
     canvas.beginFrame();
@@ -324,10 +385,10 @@ draw = function(){
             rebake[i] = false;
         }
     
-        temp_shape.draw();
+        temp_shape.draw(false, true, true);
         canvas.rasterize(temp_shape);
         rebake[i] = canvas.drag(temp_shape.vertices);
     }
         
-    canvas.endFrame(true, true, true);
+    canvas.endFrame(true, true, false);
 };
