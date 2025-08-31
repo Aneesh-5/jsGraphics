@@ -1,0 +1,80 @@
+var mouse = {
+    x: 0,
+    y: 0,
+    x_offset: 0,
+    y_offset: 0,
+    pressed: false,
+    
+    init: function(x_offset, y_offset){
+        this.x_offset = x_offset;
+        this.y_offset = y_offset;
+        cursor("none");
+    },
+    
+    update:function(){
+        this.x = mouseX - this.x_offset;
+        this.y = mouseY - this.y_offset;
+        this.pressed = mouseIsPressed;
+    }
+};
+
+var canvas = {
+    width: 0,
+    height: 0,
+    background_color: color(255, 255, 255),
+    alignment: [LEFT, CENTER, RIGHT, BOTTOM, CENTER, TOP],
+    display_fps: false,
+    last_frame: 0,
+    current_frame: 0,
+    fps: 0,
+    
+    init: function(width, height, bg_color){
+        this.width = width;
+        this.height = height;
+        this.background_color = bg_color;
+        mouse.init(this.width, this.height);
+        
+        frameRate(Infinity);
+        colorMode(RGB);
+        textFont(createFont("monospace"));
+        noStroke();
+        noFill();
+    },
+    
+    beginFrame: function(){
+        pushMatrix();
+        translate(this.width, this.height);
+        background(this.background_color);
+        mouse.update();
+        
+        if(this.displayFPS){
+            var now = millis();
+            this.current_frame = now - this.last_frame;
+            this.last_frame = now;
+            this.fps = 1000/this.current_frame;
+            
+            this.print(this.fps, 0, 0, -1, -1, color(0), 1);
+        }
+    },
+    
+    endFrame: function(){
+        popMatrix();
+    },
+    
+    print: function(txt, x, y, ha, va, col, thck){
+        fill(col);
+        strokeWeight(thck);
+        textAlign(this.alignment[ha+1], this.alignment[va+4]);
+        text(txt,x,y);
+    }
+};
+
+canvas.init(300,300, color(255));
+
+var draw = function(){
+    canvas.beginFrame();
+    fill(0);
+    ellipse(mouse.x, mouse.y, 5,5);
+    
+    canvas.endFrame();
+};
