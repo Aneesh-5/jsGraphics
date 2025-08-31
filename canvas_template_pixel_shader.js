@@ -41,9 +41,15 @@ var mousePressed = function(){
 //Better Color
 var _color = function(r, g, b, a){
     if (g === undefined && b === undefined){
-        this.r = r;
-        this.g = r;
-        this.b = r;
+        if (r === -1){
+            this.r = random(0,255);
+            this.g = random(0,255);
+            this.b = random(0,255);
+        }else{
+            this.r = r;
+            this.g = r;
+            this.b = r;
+        }
     }else{
         this.r = r;
         this.g = g;
@@ -83,7 +89,6 @@ var _shape = function(vertices, line_color, shape_color){
     this.vertices = vertices;
     this.line_color = line_color;
     this.shape_color = shape_color;
-    this.normals = [];
 };
 _shape.prototype.draw = function() {
     
@@ -102,48 +107,34 @@ _shape.prototype.draw = function() {
         ellipse(vtx.x, vtx.y, vtx.r, vtx.r);
     }
 };
-_shape.prototype.find_normals = function(){
+_shape.prototype.bake_edges = function(){
+    this.edges = [];
     var n = this.vertices.length;
-    for(var i = 0; i<n;i++){
-        
-        var A = this.vertices[i];
-        var B = this.vertices[(i+1)%n];
-        
-        var dx = B.x - A.x;
-        var dy = B.y - A.y;
-        
-        var theta = Math.atan2(dy, dx);
-        var _cos = Math.cos(-theta);
-        var _sin = Math.sin(-theta);
-        
-        this.normals[i] = [A, _cos, _sin];
-    }
-};
-_shape.prototype.membership = function(_x, _y){
-    var n = this.vertices.length;
-    var epsilon = 4;
-    var membership = true;
-    var edge_case = true;
-    for(var i=0; i<n; i++){
-        var A = this.normals[i][0];
-        var _cos = this.normals[i][1];
-        var _sin = this.normals[i][2];
-        
-        var px = _x - A.x;
-        var py = _y - A.y;
-        
-        var xPrime = _cos*px - _sin*py;
-        var yPrime = _sin*px + _cos*py;
-        
-        membership = membership && (yPrime >= 10);
-        //edge_case = edge_case && (yPrime>=-epsilon && yPrime<=epsilon);
-        edge_case = edge_case && (yPrime >= -1 );
-    }
     
-    return [membership, edge_case];
+    for(var i = 0, j = n-1; i<n; j = i++){
+        var A = this.vertices[j];
+        var B = this.vertices[i];
+        this.edges.push({
+            A: A,
+            dx: B.x - A.x,
+            dy: B.y - A.y,
+            minY: Math.min(A.y, B.y),
+            maxY: Math.max(A.y, B.y)
+        });
+    }
 };
-_shape.prototype.bake_normals = function(){
-   this.find_normals();
+_shape.prototype.inside = function(x, y){
+    var inside = false;
+    var n = this.vertices.length;
+    
+    for(var i=0, j = n-1; i<n; j = i++){
+        var edge = this.edges[i];
+        if (edge.dy === 0 || y<edge.minY || y>=edge.maxY){continue;}
+        
+        var intersection_X = edge.A.x+edge.dx*(y-edge.A.y)/edge.dy;
+        if (x<intersection_X){ inside = !inside;}
+    }
+    return inside;
 };
 
 //Better Canvas
@@ -172,11 +163,13 @@ var canvas = {
         mouse.update();
     },
     
-    endFrame: function(display_fps, draw_mouse){
+    endFrame: function(display_fps, draw_mouse, show_grid){
         
         if(display_fps){ this.displayFps();}
         
         if(draw_mouse){ this.drawMouse();}
+        
+        if(show_grid){ this.drawGrid();}
         
         popMatrix();
     },
@@ -215,104 +208,126 @@ var canvas = {
         
     dragged_object: undefined,
     drag: function(drag_points){
+        var dragged = false;
+        
         if (!mouse.pressed){
             this.dragged_object = undefined;
         }else if(mouse.pressed && this.dragged_object !== undefined){
             this.dragged_object.x = mouse.x;
             this.dragged_object.y = mouse.y;
+            dragged = true;
         }else if(mouse.pressed){
             for(var i = 0; i<drag_points.length;i++){
                 var object = drag_points[i];
                 if (dist(mouse.x, mouse.y, object.x, object.y)<= object.r){
                     this.dragged_object = object;
+                    dragged = true;
                     break;
                 }
             }
         }
+        return dragged;
     },
     
     // Custom Canvas Functions Below
-    grid_size: 0,
-    drawGrid: function(grid_size, stroke_color, stroke_size){
+    
+    
+    
+    init_rasterization: function(grid_size){
         this.grid_size = grid_size;
-        stroke_color.stroke(undefined, stroke_size);
-        for(var i = 0; i<grid_size; i++){
-        var mapped_val = map(i, 0, grid_size-1, -this.height, this.height);
-        line(mapped_val, -this.height, mapped_val, this.height);
-        line(-this.height, mapped_val, this.height, mapped_val);
+        this.pixel_size = (this.width*2)/this.grid_size;
+        this.num_cells = this.grid_size*this.grid_size;
+        this.screenSpace = new Array(this.num_cells*2);
         
-        }
-    
-    },
-    
-    pixelShade: function(shape, steps){
-        
-        var pixel_size = (this.height*2)/this.grid_size;
-        noStroke();
-        fill(255, 0, 0, 100);
-        
-        
-        for(var i=0; i<=this.grid_size; i++){
-            for(var j=0; j<=this.grid_size; j++){
-                //quick exclusion case
-                //color decision case
-                    var pixel_x = map(j, 0, this.grid_size, -this.height, this.height);
-                    var pixel_y = map(i, 0, this.grid_size, -this.width, this.width);
-                    var result = shape.membership(pixel_x + pixel_size/2, pixel_y+ pixel_size/2);
-                    
-                    var full_shade = result[0];
-                    var partial_shade = result[1];
-                    
-                    if (!full_shade && !partial_shade){
-                        continue;
-                    }else{
-                        if(full_shade){
-                            fill(0,0,0,255);
-                        }else if(partial_shade){
-                            fill(0,0,0,150);
-                        }
-                        rect(pixel_x, pixel_y, pixel_size, pixel_size);
-                    }
+        var index = 0;
+        for(var i = 0; i<this.grid_size; i++){
+            for(var j = 0; j < this.grid_size; j++){
+                var x = -this.width + j* this.pixel_size + this.pixel_size/2;
+                var y = -this.height + i*this.pixel_size + this.pixel_size/2;
+                this.screenSpace[index++] = x;
+                this.screenSpace[index++] = y;
             }
         }
+    },
     
-    }
+    rasterize: function(shape){
+        noStroke();
+        fill(0,0,0, 150);
+        for(var i = 0; i<this.num_cells; i++){
+            var x = this.screenSpace[i*2];
+            var y = this.screenSpace[i*2 + 1];
+            
+            if(shape.inside(x,y)){
+                rect(
+                    x - this.pixel_size/2,
+                    y - this.pixel_size/2,
+                    this.pixel_size,
+                    this.pixel_size
+                    );
+                
+            }
+        }
+    },
     
+    drawGrid: function(){
+        stroke(0,0,0,40);
+        strokeWeight(1);
+        for (var i = 0; i<=this.grid_size; i++){
+            var x = map(i, 0, this.grid_size, -this.width, this.width);
+            var y = map(i, 0, this.grid_size, -this.height, this.height);
+
+            line(x, -this.height, x, this.height);
+            line(-this.width, y, this.width, y);
+            }
+        }
 };
 
 
 // Actual Code Below
 
+var shapes = [];
 
-//Setup
-var line_color = new _color(0);
-var vertices = [];
-var num_vertices = 5;
 var vtx_radius = 10;
-var vtx_color = new _color(200, 50, 50);
+var vtx_color = new _color(255,0,0,100);
+var black = new _color(0, 0, 0, 100);
+var console_col = new _color(0,0,0);
 
-for (var i = 0; i<num_vertices; i++){
-    var vx = 200*cos((360/num_vertices)*i);
-    var vy = 200*sin((360/num_vertices)*i);
-    vertices[i] = new _vertex(vx, vy, vtx_radius, vtx_color);
+for(var j = 3; j<7; j++){
+    var vertices = [];
+    var random_center_x = random(-130,130);
+    var random_center_y = random(-130,130);
+    var random_radius = random(50, 100);
+    var random_color = new _color(-1);
+    random_color.a = random(80,160);
+    for (var i = 0; i<j; i++){
+        var vx = random_radius*cos((360/j)*i) + random_center_x;
+        var vy = random_radius*sin((360/j)*i) + random_center_y;
+        vertices.push(new _vertex(vx, vy, vtx_radius, vtx_color));
+    }
+    shapes.push(new _shape(vertices, black, random_color));
 }
-var basic_shape = new _shape(vertices, new _color(0,0,0), new _color(100,175,255,100));
 
-var black = new _color(0,0,0, 100);
+var rebake = new Array(shapes.length).fill(true);
 
-basic_shape.bake_normals();
 
 //Draw Frames
 canvas.init(300,300, new _color(255));
+canvas.init_rasterization(50, true);
+
 draw = function(){
     canvas.beginFrame();
-    basic_shape.bake_normals();
+    for(var i= 0; i<shapes.length;i++){
+        var temp_shape = shapes[i];
+        
+        if (rebake[i]){
+            temp_shape.bake_edges();
+            rebake[i] = false;
+        }
     
-
-    canvas.drag(basic_shape.vertices);
-    //canvas.drawGrid(50, black, 1);
-    canvas.grid_size = 30;
-    canvas.pixelShade(basic_shape, 0);
-    basic_shape.draw();
-    canvas.endFrame(true, true);
+        temp_shape.draw();
+        canvas.rasterize(temp_shape);
+        rebake[i] = canvas.drag(temp_shape.vertices);
+    }
+        
+    canvas.endFrame(true, true, true);
 };
