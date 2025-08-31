@@ -77,6 +77,9 @@ _color.prototype.stroke = function(alpha, weight){
     strokeWeight(weight);
     stroke(this.r, this.g, this.b, this.a);
 };
+_color.prototype.contrast = function(){
+    return new _color(255 - this.r, 255 - this.g, 255 - this.b);
+};
 
 var _vertex = function(x, y, r, c){
     this.x = x;
@@ -220,13 +223,15 @@ var canvas = {
         mouse.update();
     },
     
-    endFrame: function(display_fps, draw_mouse, show_grid){
+    endFrame: function(display_fps, draw_mouse, show_grid, show_resolution){
         
         if(display_fps){ this.displayFps();}
         
         if(draw_mouse){ this.drawMouse();}
         
         if(show_grid){ this.drawGrid();}
+        
+        if(show_resolution){ this.displayRes();}
         
         popMatrix();
     },
@@ -289,7 +294,7 @@ var canvas = {
     // Custom Canvas Functions Below
     
     
-    
+    grid_size: 0,
     init_rasterization: function(grid_size){
         this.grid_size = grid_size;
         this.pixel_size = (this.width*2)/this.grid_size;
@@ -307,7 +312,7 @@ var canvas = {
         }
     },
     
-    rasterize: function(shape){
+    rasterize: function(shape, steps){
         noStroke();
         for(var i = 0; i<this.num_cells; i++){
             var x = this.screenSpace[i*2];
@@ -319,7 +324,7 @@ var canvas = {
                 
             var coverage = shape.coverage(x, y, this.pixel_size);
             if(coverage >0){
-                shape.shape_color.fill(coverage*255);
+                shape.shape_color.fill((floor(coverage*steps)/(steps-1))*255);
                 rect(
                     x - this.pixel_size/2,
                     y - this.pixel_size/2,
@@ -341,32 +346,49 @@ var canvas = {
             line(x, -this.height, x, this.height);
             line(-this.width, y, this.width, y);
             }
-        }
+        },
+    
+    displayRes: function(){
+        this.print(this.grid_size + ' x ' + this.grid_size, 300 - 5, -300, 1, 1, new _color(0), 1);
+    },
+    
+    label: function(shape, txt){
+        this.center_x = (shape.bounding_box.minX + shape.bounding_box.maxX)/2;
+    this.center_y = (shape.bounding_box.minY + shape.bounding_box.maxY)/2;
+    canvas.print(txt, this.center_x, this.center_y, 0, 0, shape.shape_color.contrast(), 1);
+    }
 };
 
 
 // Actual Code Below
 
 var shapes = [];
+var rebake = [];
+var raster_resolution = [];
 
 var vtx_radius = 10;
 var vtx_color = new _color(0,0,0,80);
 var black = new _color(0, 0, 0, 150);
 var console_col = new _color(0,0,0);
 
-for(var j = 3; j<10; j++){
+for(var j = 0; j<=5; j++){
+    var num_vtx = j;
+    if(num_vtx<3){num_vtx = 3;}
+    
     var vertices = [];
     var random_center_x = random(-130,130);
     var random_center_y = random(-130,130);
     var random_radius = random(50, 100);
     var random_color = new _color(-1);
     random_color.a = random(80,160);
-    for (var i = 0; i<j; i++){
-        var vx = random_radius*cos((360/j)*i) + random_center_x;
-        var vy = random_radius*sin((360/j)*i) + random_center_y;
+    for (var i = 0; i<num_vtx; i++){
+        var vx = random_radius*cos((360/num_vtx)*i) + random_center_x;
+        var vy = random_radius*sin((360/num_vtx)*i) + random_center_y;
         vertices.push(new _vertex(vx, vy, vtx_radius, vtx_color));
     }
     shapes.push(new _shape(vertices, black, random_color));
+    rebake.push(true);
+    raster_resolution.push(floor(random(2,5)));
 }
 var rebake = new Array(shapes.length).fill(true);
 
@@ -385,10 +407,11 @@ draw = function(){
             rebake[i] = false;
         }
     
-        temp_shape.draw(false, true, true);
-        canvas.rasterize(temp_shape);
+        temp_shape.draw(false, false, true);
+        canvas.rasterize(temp_shape,raster_resolution[i]);
+        canvas.label(temp_shape, 'aa steps: ' + raster_resolution[i]);
         rebake[i] = canvas.drag(temp_shape.vertices);
     }
         
-    canvas.endFrame(true, true, false);
+    canvas.endFrame(true, true, false, true);
 };
